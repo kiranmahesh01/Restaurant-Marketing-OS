@@ -1,0 +1,197 @@
+[
+  {
+    "name": "Page /",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /admin",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /ads",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /approvals",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /audit",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /blasts",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /calendar",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /campaigns",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /content",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /customers",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /dashboard",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /docs",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /integrations",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /offers",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /orders",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /reviews",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /settings",
+    "result": "PASS"
+  },
+  {
+    "name": "Page /support",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/ai/status",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/blasts",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/content",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/customers",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/dashboard",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/health",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/integrations",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/media",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/notifications",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/offers",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/ops/checklist",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/orders",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/restaurants",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/reviews",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/session",
+    "result": "PASS"
+  },
+  {
+    "name": "GET /api/tickets",
+    "result": "PASS"
+  },
+  {
+    "name": "Local AI generation",
+    "result": "PASS"
+  },
+  {
+    "name": "Content create / approve / schedule / publish",
+    "result": "PASS"
+  },
+  {
+    "name": "Offer create / activate / pause",
+    "result": "PASS"
+  },
+  {
+    "name": "Customer creation and order loyalty attribution",
+    "result": "PASS"
+  },
+  {
+    "name": "AI review reply",
+    "result": "PASS"
+  },
+  {
+    "name": "Campaign creation",
+    "result": "PASS"
+  },
+  {
+    "name": "Demo blast creation and send",
+    "result": "PASS"
+  },
+  {
+    "name": "Media create / delete",
+    "result": "PASS"
+  },
+  {
+    "name": "Support ticket creation",
+    "result": "PASS"
+  },
+  {
+    "name": "Due scheduled post worker",
+    "result": "PASS"
+  },
+  {
+    "name": "Viewer denied content creation",
+    "result": "PASS"
+  },
+  {
+    "name": "Viewer denied customer creation",
+    "result": "FAIL",
+    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+  },
+  {
+    "name": "Viewer denied orders",
+    "result": "FAIL",
+    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+  },
+  {
+    "name": "Marketer cannot bypass approval via update",
+    "result": "FAIL",
+    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+  }
+]
