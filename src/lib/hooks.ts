@@ -44,6 +44,8 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     },
   });
   const data = await res.json();
+  if (res.status === 401) window.location.assign("/login");
+  if (data.code === "ONBOARDING_REQUIRED") window.location.assign("/onboarding");
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data as T;
 }

@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/server/context";
 import { NextRequest, NextResponse } from "next/server";
 import { getStore, updateContent } from "@/lib/store";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
  * Real impl: call Meta/TikTok adapters per platform, handle partial failures.
  */
 export async function POST(req: NextRequest) {
+  if (!isDemoMode()) return NextResponse.json({error:"Live publishing is not connected. No posts were published."},{status:503});
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const hdr = req.headers.get("authorization") || req.headers.get("x-cron-secret");
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
   const now = Date.now();
   const due = s.content.filter(
     (c) =>
+      c.restaurantId === s.activeRestaurantId &&
       c.status === "scheduled" &&
       c.scheduledAt &&
       new Date(c.scheduledAt).getTime() <= now

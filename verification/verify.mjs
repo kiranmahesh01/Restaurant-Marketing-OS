@@ -16,9 +16,9 @@ await test('Customer creation and order loyalty attribution',async()=>{customer=
 await test('AI review reply',async()=>{const r=await req('/api/reviews');assert.ok((await post('/api/reviews',{action:'reply',id:r.data.reviews[0].id,ai:true})).review.replied)});
 await test('Campaign creation',async()=>{const r=await post('/api/campaigns/drop',{name:'Verification',topic:'Brunch',offer:{name:'Test',code:'TEST20',value:20},platforms:['instagram','sms']});assert.equal(r.content.length,2)});
 await test('Demo blast creation and send',async()=>{const r=await post('/api/blasts',{name:'Verification',body:'Test',channel:'sms'});assert.equal((await post('/api/blasts',{action:'send',id:r.blast.id})).demo,true)});
-await test('Media create / delete',async()=>{const r=await post('/api/media',{name:'Test',url:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>'});await post('/api/media',{action:'delete',id:r.asset.id})});
+await test('Media create / delete',async()=>{const r=await post('/api/media',{name:'Test',url:'https://example.com/test.png'});await post('/api/media',{action:'delete',id:r.asset.id})});
 await test('Support ticket creation',async()=>assert.ok((await post('/api/tickets',{subject:'Verification',body:'Test'})).ticket));
-await test('Due scheduled post worker',async()=>{await post('/api/content',{action:'schedule',id:content.id,scheduledAt:'2020-01-01T00:00:00Z'});assert.ok((await post('/api/jobs/scheduled-publish',{})).ids.includes(content.id))});
+await test('Due scheduled post worker',async()=>{const fresh=(await post('/api/content',{title:'Scheduled check',body:'Test'})).content;await post('/api/content',{action:'approve',id:fresh.id});await post('/api/content',{action:'schedule',id:fresh.id,scheduledAt:'2020-01-01T00:00:00Z'});assert.ok((await post('/api/jobs/scheduled-publish',{})).ids.includes(fresh.id))});
 let session=(await req('/api/session')).data;let viewer=session.users.find(u=>u.role==='viewer');let marketer=session.users.find(u=>u.role==='marketer');
 await test('Viewer denied content creation',async()=>{assert.ok(viewer);await post('/api/session',{action:'switch_user',userId:viewer.id});assert.equal((await req('/api/content',{title:'Forbidden',body:'Test'})).status,403)});
 await test('Viewer denied customer creation',async()=>assert.equal((await req('/api/customers',{name:'Should be denied'})).status,403));

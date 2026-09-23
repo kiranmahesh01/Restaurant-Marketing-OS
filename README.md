@@ -1,3 +1,19 @@
+# Current live setup — 23 September 2026
+
+The original demo documentation below is historical. The app now supports Supabase login, durable restaurant workspaces and private media. External social/SMS/email/POS/ads/video delivery is still unavailable. See [VERIFICATION.md](VERIFICATION.md) for current results and limitations.
+
+For local demo: Node 22, `npm ci`, then `DEMO_MODE=true npm run dev`.
+
+For live operation, apply only `supabase/migrations/003_live_workspaces.sql` and `004_private_media.sql`; these are already applied to the new Supabase project `trmfoxibmlhvpczeegsx`. Earlier migrations are legacy scaffolding, not required for this persistence layer.
+
+Configure Vercel team `kiran-c364` with `DEMO_MODE=false`, `NEXT_PUBLIC_SUPABASE_URL=https://trmfoxibmlhvpczeegsx.supabase.co`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `NEXT_PUBLIC_APP_URL` set to the final HTTPS origin. Keep server credentials out of GitHub. Create the initial app user in Supabase Authentication, then sign in and create the restaurant. Supabase dashboard accounts are separate from app users.
+
+The server rejects conflicting concurrent edits with HTTP 409. Restaurant snapshots are limited to 8 MB. This is an initial small-team architecture, not a load-tested high-volume platform. Live mode never falls back to sample data. Demo reset/persona switching and simulated orders are disabled.
+
+---
+
+## Original demo documentation (historical)
+
 # Restaurant Marketing OS
 
 All-in-one **restaurant marketing command center**: AI content for every social channel, approval workflow, **Offers Hub** (QSR-style promo calendar), ads connectors, POS/order ingestion, loyalty CRM, reviews, analytics, notifications, audit logs, and multi-restaurant tenancy.

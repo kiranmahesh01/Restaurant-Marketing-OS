@@ -10,7 +10,7 @@ import { roleLabel } from "@/lib/rbac";
 import Link from "next/link";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { data, loading, reload } = useDashboard();
+  const { data, loading, error, reload } = useDashboard();
   const [showNotes, setShowNotes] = useState(false);
   const [showPersona, setShowPersona] = useState(false);
 
@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ action: "switch_user", userId }),
     });
     setShowPersona(false);
-    reload();
+    window.location.reload();
   }
 
   return (
@@ -104,6 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ) : null}
             </div>
 
+            {!data?.demoMode && <Button variant="ghost" size="sm" onClick={async()=>{await fetch("/api/auth/signout",{method:"POST"});window.location.assign("/login");}}>Sign out</Button>}
             {/* Persona switcher = demo login as Admin vs Client roles */}
             <div className="relative">
               <button
@@ -122,9 +123,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <p className="text-xs font-medium text-ink-900">{data?.user?.name || "…"}</p>
                   <p className="text-[10px] text-ink-500">{roleLabel(data?.role)}</p>
                 </div>
-                <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
+                {data?.demoMode && <ChevronDown className="h-3.5 w-3.5 text-ink-400" />}
               </button>
-              {showPersona ? (
+              {showPersona && data?.demoMode ? (
                 <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-ink-200 bg-white p-2 shadow-soft">
                   <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">
                     Switch persona (demo login)
@@ -163,7 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-6 py-6">{children}</main>
+        <main className="flex-1 overflow-y-auto px-6 py-6">{error ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</p> : children}</main>
       </div>
     </div>
   );

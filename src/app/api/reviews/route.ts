@@ -1,22 +1,23 @@
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { getStore, scoped, updateReview } from "@/lib/store";
 import { generateContentLocal } from "@/lib/ai-content";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({ reviews: scoped(s.reviews) });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (body.action === "reply" && body.id) {
       let replyBody = body.replyBody as string | undefined;
       if (body.ai && !replyBody) {
         const s = getStore();
-        const review = s.reviews.find((r) => r.id === body.id);
+        const review = scoped(s.reviews).find((r) => r.id === body.id);
         const restaurant = s.restaurants.find((r) => r.id === s.activeRestaurantId)!;
         const gen = generateContentLocal({
           restaurant,
@@ -37,9 +38,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: writers});

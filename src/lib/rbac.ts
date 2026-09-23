@@ -114,7 +114,7 @@ export function navFor(role: UserRole | undefined, portal: "admin" | "client" | 
 }
 
 export function canMutate(role: UserRole | undefined) {
-  return role !== "viewer";
+  return !!role && ["platform_admin", "owner", "manager", "marketer"].includes(role);
 }
 
 export function canApprove(role: UserRole | undefined) {

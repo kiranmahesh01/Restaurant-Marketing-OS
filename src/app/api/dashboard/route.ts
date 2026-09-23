@@ -1,15 +1,15 @@
+import { withWorkspace, errorResponse } from "@/lib/server/workspace";
 import { NextResponse } from "next/server";
 import { getDashboardBundle } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   try {
     return NextResponse.json(getDashboardBundle());
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed" },
-      { status: 500 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});

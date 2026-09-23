@@ -255,6 +255,7 @@ export type AnalyticsSnapshot = {
 };
 
 export type MediaAsset = {
+  storagePath?: string;
   id: string;
   restaurantId: string;
   name: string;

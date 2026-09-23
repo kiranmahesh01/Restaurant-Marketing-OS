@@ -1,14 +1,18 @@
+import { adminClient } from "@/lib/server/supabase";
+import { storeContext } from "@/lib/server/context";
+import { randomUUID } from "node:crypto";
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { createMediaAsset, deleteMediaAsset, getStore, scoped } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({ media: scoped(s.media || []) });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
 
@@ -25,12 +29,24 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      if (!["image/png","image/jpeg","image/webp","image/gif","video/mp4","video/webm"].includes(f.type)) return NextResponse.json({error:"Unsupported media type"},{status:400});
       const buf = Buffer.from(await f.arrayBuffer());
       const b64 = buf.toString("base64");
       const mime = f.type || "application/octet-stream";
-      const dataUrl = `data:${mime};base64,${b64}`;
+      let dataUrl = `data:${mime};base64,${b64}`;
+      let storagePath: string | undefined;
+      if (!getStore().demoMode) {
+        storagePath = `${getStore().activeRestaurantId}/${randomUUID()}`;
+        const db=adminClient();
+        const {error}=await db.storage.from("rmos-media").upload(storagePath,buf,{contentType:mime,upsert:false});
+        if(error) return NextResponse.json({error:"Media upload failed. Check storage setup."},{status:503});
+        const path=storagePath;
+        storeContext.getStore()?.rollback?.push(async()=>{await db.storage.from("rmos-media").remove([path]);});
+        dataUrl="https://storage.invalid/pending";
+      }
       const kind = mime.startsWith("video/") ? "video" : mime.startsWith("image/") ? "image" : "other";
       const asset = createMediaAsset({
+        storagePath,
         name: f.name,
         url: dataUrl,
         mimeType: mime,
@@ -42,16 +58,24 @@ export async function POST(req: NextRequest) {
           .map((t) => t.trim())
           .filter(Boolean),
       });
+      if (storagePath) {
+        asset.url=`/api/media/file?id=${asset.id}`;
+      }
       return NextResponse.json({
         asset,
-        demo: true,
-        message: "Stored in demo memory as data URI. Production: Supabase Storage bucket `media`.",
+        demo: getStore().demoMode,
+        message: getStore().demoMode ? "Stored in demo memory" : "Saved to private media storage",
       });
     }
 
     const body = await req.json();
     if (body.action === "delete" && body.id) {
+      const asset=scoped(getStore().media).find(m=>m.id===body.id);
       deleteMediaAsset(body.id);
+      if(asset?.storagePath && !getStore().demoMode) {
+        const path=asset.storagePath;
+        storeContext.getStore()?.afterCommit?.push(async()=>{await adminClient().storage.from("rmos-media").remove([path]);});
+      }
       return NextResponse.json({ ok: true });
     }
     if (body.action === "create_stock" || body.url) {
@@ -68,9 +92,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Media failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: writers});

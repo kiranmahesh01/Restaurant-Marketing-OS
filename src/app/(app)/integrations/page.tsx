@@ -33,13 +33,13 @@ export default function IntegrationsPage() {
     <div className="animate-fade-in mx-auto max-w-6xl">
       <PageHeader
         title="Integrations"
-        subtitle="Connectors scaffolded — toggle demo status; wire OAuth/keys for production"
+        subtitle={data?.demoMode ? "Preview integration controls in demo mode" : "External delivery services require connection before use"}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => test("test_publish")}>
+            <Button disabled={!data?.demoMode} size="sm" variant="outline" onClick={() => test("test_publish")}>
               <Share2 className="h-3.5 w-3.5" /> Test publish
             </Button>
-            <Button size="sm" variant="outline" onClick={() => test("test_video_render")}>
+            <Button disabled={!data?.demoMode} size="sm" variant="outline" onClick={() => test("test_video_render")}>
               <Video className="h-3.5 w-3.5" /> Test video
             </Button>
           </div>
@@ -49,6 +49,7 @@ export default function IntegrationsPage() {
         <Card className="mb-4 border-brand-200 bg-brand-50/50 p-4 text-sm text-ink-800">{msg}</Card>
       ) : null}
 
+      {!data?.demoMode && <Card className="mb-6 p-5">Social publishing, SMS/email delivery, ad sync, video rendering and POS imports are not connected. Your saved drafts and customer records remain available. Ask your administrator to configure the providers your restaurant uses.</Card>}
       {groups.map((g) => {
         const list = (data?.integrations || []).filter((i) => i.category === g);
         if (!list.length) return null;

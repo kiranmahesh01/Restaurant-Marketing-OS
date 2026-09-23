@@ -1,3 +1,7 @@
+import { validate, contentInput, offerInput, customerInput, orderInput } from "./server/validation";
+import { computeAnalytics } from "./server/analytics";
+import { storeContext, isDemoMode, AppError } from "./server/context";
+import { canApprove, canMutate } from "./rbac";
 import { createInitialStore } from "./demo-data";
 import type {
   AuditLog,
@@ -41,10 +45,16 @@ function getGlobal(): GlobalStore {
 }
 
 export function getStore(): StoreShape {
+  const context = storeContext.getStore();
+  if (context) return context.data;
+  if (!isDemoMode()) throw new AppError("Request authentication context is required", 503);
   return getGlobal().data;
 }
 
 export function setStore(next: StoreShape) {
+  const context = storeContext.getStore();
+  if (context) { context.data = next; context.dirty = true; return; }
+  if (!isDemoMode()) throw new AppError("Request authentication context is required", 503);
   getGlobal().data = next;
 }
 
@@ -105,9 +115,10 @@ export function getActiveUser() {
 }
 
 export function switchUser(userId: string) {
+  if(!isDemoMode()) throw new AppError("Persona switching disabled",403);
   return mutateStore((s) => {
     const u = s.users.find((x) => x.id === userId);
-    if (!u) throw new Error("User not found");
+    if (!u) throw new AppError("User not found");
     s.activeUserId = userId;
     // Client personas lock to their restaurants; admin keeps current or first
     if (u.portal === "client" && u.restaurantIds.length) {
@@ -161,7 +172,7 @@ export function getDashboardBundle(restaurantId?: string) {
     auditLogs: scoped(s.auditLogs, rid).slice(0, 50),
     campaigns: scoped(s.campaigns, rid),
     ads: scoped(s.ads, rid),
-    analytics: s.analytics.find((a) => a.restaurantId === rid) || s.analytics[0],
+    analytics: s.demoMode ? s.analytics.find((a) => a.restaurantId === rid) || s.analytics[0] : computeAnalytics(s, rid),
     media: scoped(s.media || [], rid),
     blasts: scoped(s.blasts || [], rid),
     tickets,
@@ -186,6 +197,7 @@ export function createTicket(input: {
   category?: SupportTicket["category"];
   restaurantId?: string;
 }) {
+  assertTenant(input.restaurantId); requireText(input.subject,"Subject",200);requireText(input.body,"Body");
   return mutateStore((s) => {
     if (!s.tickets) s.tickets = [];
     const user = s.users.find((u) => u.id === s.activeUserId) || s.users[0];
@@ -225,9 +237,10 @@ export function updateTicket(
   id: string,
   patch: Partial<SupportTicket>
 ) {
+  assertManager(); safePatch(patch,["status","assignee","priority"]);
   return mutateStore((s) => {
-    const idx = (s.tickets || []).findIndex((t) => t.id === id);
-    if (idx < 0) throw new Error("Ticket not found");
+    const idx = (s.tickets || []).findIndex((t) => t.id === id && t.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Ticket not found");
     s.tickets[idx] = {
       ...s.tickets[idx],
       ...patch,
@@ -277,12 +290,15 @@ export function segmentCustomers(restaurantId: string, segment: BlastSegment): C
 export function createMediaAsset(
   input: Partial<MediaAsset> & { name: string; url: string }
 ): MediaAsset {
+  assertWriter(); assertTenant(input.restaurantId);requireText(input.name,"Name",200);
+  if(typeof input.url!=="string" || !/^(\/api\/media\/file\?id=media_[a-zA-Z0-9-]+$|https:\/\/|data:image\/(png|jpeg|webp|gif);base64,|data:video\/(mp4|webm);base64,)/.test(input.url)) throw new AppError("Use an HTTPS media URL or supported image/video upload");
   return mutateStore((s) => {
     if (!s.media) s.media = [];
     const asset: MediaAsset = {
       id: uid("media"),
       restaurantId: input.restaurantId || s.activeRestaurantId,
       name: input.name,
+      storagePath: input.storagePath,
       mimeType: input.mimeType || "image/jpeg",
       size: input.size || 0,
       url: input.url,
@@ -295,7 +311,7 @@ export function createMediaAsset(
     };
     s.media.unshift(asset);
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "media.uploaded",
       entityType: "media",
       entityId: asset.id,
@@ -305,10 +321,11 @@ export function createMediaAsset(
 }
 
 export function deleteMediaAsset(id: string) {
+  assertWriter(); if(!scoped(getStore().media).some(m=>m.id===id)) throw new AppError("Media not found",404);
   return mutateStore((s) => {
     s.media = (s.media || []).filter((m) => m.id !== id);
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "media.deleted",
       entityType: "media",
       entityId: id,
@@ -319,6 +336,8 @@ export function deleteMediaAsset(id: string) {
 export function createBlast(
   input: Partial<MessageBlast> & { name: string; body: string; channel: "sms" | "email" }
 ): MessageBlast {
+  assertWriter(); assertTenant(input.restaurantId);requireText(input.name,"Name",200);requireText(input.body,"Body");
+  if(!["sms","email"].includes(input.channel)) throw new AppError("Invalid channel");
   return mutateStore((s) => {
     if (!s.blasts) s.blasts = [];
     const segment = (input.segment || "all_opted_in") as BlastSegment;
@@ -339,16 +358,16 @@ export function createBlast(
       body: input.body,
       offerId: input.offerId,
       offerCode: input.offerCode,
-      status: input.status || "draft",
+      status: "draft",
       audienceCount: eligible.length,
       sentCount: 0,
       scheduledAt: input.scheduledAt,
-      demo: true,
+      demo: s.demoMode,
       createdAt: new Date().toISOString(),
     };
     s.blasts.unshift(blast);
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "blast.created",
       entityType: "blast",
       entityId: blast.id,
@@ -358,9 +377,11 @@ export function createBlast(
 }
 
 export function sendBlast(id: string) {
+  assertWriter();
+  if(!getStore().demoMode) throw new AppError("Live message delivery is not connected. No messages were sent.",503);
   return mutateStore((s) => {
-    const idx = (s.blasts || []).findIndex((b) => b.id === id);
-    if (idx < 0) throw new Error("Blast not found");
+    const idx = (s.blasts || []).findIndex((b) => b.id === id && b.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Blast not found");
     const blast = s.blasts[idx];
     // Demo send — no Twilio/Mailchimp call
     s.blasts[idx] = {
@@ -371,7 +392,7 @@ export function sendBlast(id: string) {
       demo: true,
     };
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "blast.sent_demo",
       entityType: "blast",
       entityId: id,
@@ -411,6 +432,9 @@ export type CampaignDropInput = {
 };
 
 export function createCampaignDrop(input: CampaignDropInput) {
+  assertWriter(); requireText(input.name,"Name",200);requireText(input.topic,"Topic");
+  if(input.submitForApproval === false && !canApprove(getActiveUser()?.role)) throw new AppError("Your role cannot skip approval",403);
+  if(input.scheduleAt && !Number.isFinite(Date.parse(input.scheduleAt))) throw new AppError("Invalid schedule date");
   let result: {
     campaign: Campaign;
     offer: Offer;
@@ -425,15 +449,15 @@ export function createCampaignDrop(input: CampaignDropInput) {
 
     let offer: Offer;
     if (input.offerMode === "existing" && input.existingOfferId) {
-      const found = s.offers.find((o) => o.id === input.existingOfferId);
-      if (!found) throw new Error("Offer not found");
+      const found = s.offers.find((o) => o.id === input.existingOfferId && o.restaurantId === rid);
+      if (!found) throw new AppError("Offer not found");
       offer = found;
       if (input.activateOffer && offer.status !== "active") {
         offer.status = "active";
       }
     } else {
       if (!input.offer?.name || !input.offer?.code) {
-        throw new Error("Offer name and code required");
+        throw new AppError("Offer name and code required");
       }
       offer = {
         id: uid("off"),
@@ -493,11 +517,7 @@ export function createCampaignDrop(input: CampaignDropInput) {
       length: "medium",
     });
 
-    const status: ContentStatus = input.scheduleAt
-      ? "scheduled"
-      : input.submitForApproval === false
-        ? "approved"
-        : "pending_approval";
+    const status: ContentStatus = input.submitForApproval !== false ? "pending_approval" : input.scheduleAt ? "scheduled" : "approved";
 
     if (primaryPlatforms.length) {
       const item: ContentItem = {
@@ -589,7 +609,7 @@ export function createCampaignDrop(input: CampaignDropInput) {
     }
 
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "campaign.drop_created",
       entityType: "campaign",
       entityId: campaign.id,
@@ -620,9 +640,35 @@ export function createCampaignDrop(input: CampaignDropInput) {
   return result!;
 }
 
+
+function assertWriter() { if (!canMutate(getActiveUser()?.role)) throw new AppError("Your role is read-only",403); }
+function assertManager() { if (!canApprove(getActiveUser()?.role)) throw new AppError("Manager access required",403); }
+function assertTenant(id?: string) {
+  if (id && id !== activeRestaurantId()) throw new AppError("Restaurant access denied",403);
+}
+function requireText(value: unknown, name: string, max=10000) {
+  if(typeof value!=="string" || !value.trim() || value.length>max) throw new AppError(`${name} is required and must be at most ${max} characters`);
+}
+function validateContentStatus(status: ContentStatus, previous?: ContentItem) {
+  if (!["draft","pending_approval","approved","scheduled","published","rejected","failed"].includes(status)) throw new AppError("Invalid content status");
+  if (["approved","rejected"].includes(status) && !canApprove(getActiveUser()?.role)) throw new AppError("Your role cannot approve content",403);
+  if (["scheduled","published"].includes(status)) {
+    if (!previous || !["approved","scheduled"].includes(previous.status)) throw new AppError("Content must be approved first",409);
+    if (status === "published" && !getStore().demoMode) throw new AppError("Live publishing is not connected. Content was not published.",503);
+  }
+}
+function safePatch<T extends object>(patch:T, allowed:string[]) {
+  if(Object.keys(patch).some(k=>!allowed.includes(k))) throw new AppError("Patch contains a protected or unsupported field");
+}
+
 export function createContent(
   input: Partial<ContentItem> & { title: string; body: string }
 ): ContentItem {
+  assertWriter(); assertTenant(input.restaurantId); requireText(input.title,"Title",200); requireText(input.body,"Body");
+  validate(contentInput,input);
+  if(input.offerId && !scoped(getStore().offers).some(o=>o.id===input.offerId)) throw new AppError("Offer not found",404);
+  if(input.campaignId && !scoped(getStore().campaigns).some(c=>c.id===input.campaignId)) throw new AppError("Campaign not found",404);
+  validateContentStatus(input.status || "draft");
   return mutateStore((s) => {
     const item: ContentItem = {
       id: uid("cnt"),
@@ -635,7 +681,7 @@ export function createContent(
       mediaUrls: input.mediaUrls || [],
       mediaType: input.mediaType || "none",
       scheduledAt: input.scheduledAt,
-      createdBy: input.createdBy || "Alex Rivera",
+      createdBy: getActiveUser()?.name || "User",
       aiGenerated: !!input.aiGenerated,
       campaignId: input.campaignId,
       offerId: input.offerId,
@@ -661,9 +707,22 @@ export function createContent(
 }
 
 export function updateContent(id: string, patch: Partial<ContentItem>) {
+  assertWriter();
+  validate(contentInput.partial().omit({restaurantId:true,createdBy:true,aiGenerated:true,campaignId:true,offerId:true}).extend({approvedBy: contentInput.shape.title.optional(),rejectionReason: contentInput.shape.body.optional(),publishedAt:contentInput.shape.scheduledAt}),patch);
+  safePatch(patch,["title","body","hashtags","platforms","status","mediaUrls","mediaType","scheduledAt","approvedBy","rejectionReason","publishedAt"]);
+  const before = scoped(getStore().content).find(c=>c.id===id);
+  if (!before) throw new AppError("Content not found",404);
+  if(patch.title !== undefined) requireText(patch.title,"Title",200);
+  if(patch.body !== undefined) requireText(patch.body,"Body");
+  if(patch.scheduledAt && !Number.isFinite(Date.parse(patch.scheduledAt))) throw new AppError("Invalid schedule date");
+  if(patch.status) validateContentStatus(patch.status,before);
+  if(patch.approvedBy && !canApprove(getActiveUser()?.role)) throw new AppError("Your role cannot approve content",403);
+  if((patch.body!==undefined || patch.title!==undefined || patch.mediaUrls!==undefined || patch.platforms!==undefined) && ["approved","scheduled","published"].includes(before.status)) {
+    patch = {...patch,status:"draft",approvedBy:undefined,publishedAt:undefined,scheduledAt:undefined};
+  }
   return mutateStore((s) => {
-    const idx = s.content.findIndex((c) => c.id === id);
-    if (idx < 0) throw new Error("Content not found");
+    const idx = s.content.findIndex((c) => c.id === id && c.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Content not found");
     const prev = s.content[idx];
     s.content[idx] = {
       ...prev,
@@ -683,6 +742,10 @@ export function updateContent(id: string, patch: Partial<ContentItem>) {
 }
 
 export function createOffer(input: Partial<Offer> & { name: string; code: string }): Offer {
+  assertWriter(); assertTenant(input.restaurantId); requireText(input.name,"Name",200);requireText(input.code,"Code",50);
+  validate(offerInput,input);
+  if (scoped(getStore().offers).some(o=>o.code===input.code.toUpperCase())) throw new AppError("Offer code already exists",409);
+  if(input.value!==undefined && (!Number.isFinite(input.value)||input.value<0)) throw new AppError("Invalid offer value");
   return mutateStore((s) => {
     const offer: Offer = {
       id: uid("off"),
@@ -706,7 +769,7 @@ export function createOffer(input: Partial<Offer> & { name: string; code: string
     };
     s.offers.unshift(offer);
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "offer.created",
       entityType: "offer",
       entityId: offer.id,
@@ -715,12 +778,14 @@ export function createOffer(input: Partial<Offer> & { name: string; code: string
 }
 
 export function updateOffer(id: string, patch: Partial<Offer>) {
+  validate(offerInput.partial().omit({restaurantId:true,code:true,value:true,type:true}),patch);
+  assertWriter(); safePatch(patch,["name","description","status","startsAt","endsAt","channels","audience","stackable","minOrder","maxRedemptions"]);
   return mutateStore((s) => {
-    const idx = s.offers.findIndex((o) => o.id === id);
-    if (idx < 0) throw new Error("Offer not found");
+    const idx = s.offers.findIndex((o) => o.id === id && o.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Offer not found");
     s.offers[idx] = { ...s.offers[idx], ...patch, id: s.offers[idx].id };
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: `offer.${patch.status || "updated"}`,
       entityType: "offer",
       entityId: id,
@@ -729,6 +794,8 @@ export function updateOffer(id: string, patch: Partial<Offer>) {
 }
 
 export function createCustomer(input: Partial<Customer> & { name: string }): Customer {
+  assertWriter(); assertTenant(input.restaurantId); requireText(input.name,"Name",200);
+  validate(customerInput,input);
   return mutateStore((s) => {
     const c: Customer = {
       id: uid("cus"),
@@ -744,12 +811,12 @@ export function createCustomer(input: Partial<Customer> & { name: string }): Cus
       tags: input.tags || [],
       source: input.source || "import",
       birthday: input.birthday,
-      marketingOptIn: input.marketingOptIn ?? true,
+      marketingOptIn: input.marketingOptIn === true,
       createdAt: new Date().toISOString(),
     };
     s.customers.unshift(c);
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "customer.created",
       entityType: "customer",
       entityId: c.id,
@@ -758,12 +825,14 @@ export function createCustomer(input: Partial<Customer> & { name: string }): Cus
 }
 
 export function updateReview(id: string, patch: Partial<Review>) {
+  assertWriter(); safePatch(patch,["replied","replyBody"]);
+  if(!getStore().demoMode && patch.replied) throw new AppError("Live review replies are not connected. No reply was posted.",503);
   return mutateStore((s) => {
-    const idx = s.reviews.findIndex((r) => r.id === id);
-    if (idx < 0) throw new Error("Review not found");
+    const idx = s.reviews.findIndex((r) => r.id === id && r.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Review not found");
     s.reviews[idx] = { ...s.reviews[idx], ...patch, id: s.reviews[idx].id };
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: patch.replied ? "review.replied" : "review.updated",
       entityType: "review",
       entityId: id,
@@ -774,7 +843,7 @@ export function updateReview(id: string, patch: Partial<Review>) {
 export function markNotificationsRead(ids?: string[]) {
   return mutateStore((s) => {
     s.notifications = s.notifications.map((n) =>
-      !ids || ids.includes(n.id) ? { ...n, read: true } : n
+      n.restaurantId === s.activeRestaurantId && (!ids || ids.includes(n.id)) ? { ...n, read: true } : n
     );
   }).notifications;
 }
@@ -783,16 +852,18 @@ export function setIntegrationStatus(
   id: string,
   status: "connected" | "disconnected" | "error" | "pending"
 ) {
+  assertManager();
+  if(!getStore().demoMode && status === "connected") throw new AppError("This integration is not connected to a live provider",503);
   return mutateStore((s) => {
-    const idx = s.integrations.findIndex((i) => i.id === id);
-    if (idx < 0) throw new Error("Integration not found");
+    const idx = s.integrations.findIndex((i) => i.id === id && i.restaurantId === s.activeRestaurantId);
+    if (idx < 0) throw new AppError("Integration not found");
     s.integrations[idx] = {
       ...s.integrations[idx],
       status,
       lastSyncAt: status === "connected" ? new Date().toISOString() : s.integrations[idx].lastSyncAt,
     };
     addAudit(s, {
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: `integration.${status}`,
       entityType: "integration",
       entityId: id,
@@ -807,6 +878,7 @@ export function onboardRestaurant(input: {
   state: string;
   brandVoice?: string;
 }): Restaurant {
+  assertManager(); if(!getStore().demoMode) throw new AppError("Use restaurant onboarding",400);
   return mutateStore((s) => {
     const r: Restaurant = {
       id: uid("rest"),
@@ -856,7 +928,7 @@ export function onboardRestaurant(input: {
     });
     addAudit(s, {
       restaurantId: r.id,
-      actor: "Alex Rivera",
+      actor: getActiveUser()?.name || "User",
       action: "restaurant.onboarded",
       entityType: "restaurant",
       entityId: r.id,
@@ -866,7 +938,7 @@ export function onboardRestaurant(input: {
 
 export function switchRestaurant(id: string) {
   return mutateStore((s) => {
-    if (!s.restaurants.find((r) => r.id === id)) throw new Error("Restaurant not found");
+    if (!s.restaurants.find((r) => r.id === id)) throw new AppError("Restaurant not found");
     const user = s.users.find((u) => u.id === s.activeUserId);
     if (
       user &&
@@ -874,7 +946,7 @@ export function switchRestaurant(id: string) {
       user.restaurantIds.length &&
       !user.restaurantIds.includes(id)
     ) {
-      throw new Error("You do not have access to this restaurant");
+      throw new AppError("You do not have access to this restaurant");
     }
     s.activeRestaurantId = id;
     addAudit(s, {
@@ -887,6 +959,11 @@ export function switchRestaurant(id: string) {
 }
 
 export function ingestOrder(input: Partial<Order> & { total: number }): Order {
+  assertManager(); assertTenant(input.restaurantId);
+  validate(orderInput,input);
+  if(typeof input.total!=="number"||!Number.isFinite(input.total)||input.total<0) throw new AppError("Order total must be a nonnegative number");
+  if(input.customerId && !scoped(getStore().customers).some(c=>c.id===input.customerId)) throw new AppError("Customer not found",404);
+  if(input.externalId){const existing=scoped(getStore().orders).find(o=>o.externalId===input.externalId);if(existing)return existing;}
   return mutateStore((s) => {
     const order: Order = {
       id: uid("ord"),
@@ -916,7 +993,7 @@ export function ingestOrder(input: Partial<Order> & { total: number }): Order {
       }
     }
     if (order.customerId) {
-      const cus = s.customers.find((c) => c.id === order.customerId);
+      const cus = s.customers.find((c) => c.id === order.customerId && c.restaurantId === order.restaurantId);
       if (cus) {
         cus.visitCount += 1;
         cus.lifetimeSpend += order.total;
@@ -935,6 +1012,7 @@ export function ingestOrder(input: Partial<Order> & { total: number }): Order {
 }
 
 export function resetDemo() {
+  if(!isDemoMode()) throw new AppError("Demo reset disabled",404);
   setStore(createInitialStore());
   return getStore();
 }

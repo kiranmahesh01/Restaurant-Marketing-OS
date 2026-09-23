@@ -1,10 +1,11 @@
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { createCampaignDrop } from "@/lib/store";
 import type { ContentPlatform } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (!body.name || !body.topic) {
@@ -36,9 +37,8 @@ export async function POST(req: NextRequest) {
         "Campaign drop created: offer + multi-channel content + campaign record. Approve in Approvals or view Calendar.",
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Drop failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const POST = withWorkspace(postHandler, {roles: writers});

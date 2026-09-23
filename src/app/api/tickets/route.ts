@@ -1,14 +1,15 @@
+import { withWorkspace, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { createTicket, getDashboardBundle, updateTicket } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const bundle = getDashboardBundle();
   return NextResponse.json({ tickets: bundle.tickets, portal: bundle.portal });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (body.action === "update" && body.id) {
@@ -21,9 +22,10 @@ export async function POST(req: NextRequest) {
     const ticket = createTicket(body);
     return NextResponse.json({ ticket });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Ticket failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {});

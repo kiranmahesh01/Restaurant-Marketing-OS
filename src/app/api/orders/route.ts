@@ -1,21 +1,23 @@
+import { withWorkspace, managers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { getStore, ingestOrder, scoped } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({ orders: scoped(s.orders) });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (body.action === "ingest_demo") {
+      if (!getStore().demoMode) return NextResponse.json({error:"Demo orders are disabled in live mode"},{status:403});
       const order = ingestOrder({
         channel: body.channel || "dine_in",
         posSource: body.posSource || "demo_pos",
-        total: body.total || 42.5,
+        total: body.total ?? 42.5,
         subtotal: body.subtotal || 38,
         tax: body.tax || 3.9,
         tip: body.tip || 0.6,
@@ -30,15 +32,16 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ order, demo: true });
     }
-    if (!body.total) {
+    if (body.total === undefined) {
       return NextResponse.json({ error: "total required" }, { status: 400 });
     }
     const order = ingestOrder(body);
     return NextResponse.json({ order });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: managers});

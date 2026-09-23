@@ -1,13 +1,15 @@
+import { withWorkspace, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { generateContent } from "@/lib/ai-content";
 import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     const s = getStore();
+    if(body.restaurantId && body.restaurantId!==s.activeRestaurantId) return NextResponse.json({error:"Restaurant access denied"},{status:403});
     const restaurant =
       s.restaurants.find((r) => r.id === (body.restaurantId || s.activeRestaurantId)) ||
       s.restaurants[0];
@@ -30,9 +32,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Generation failed" },
-      { status: 500 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const POST = withWorkspace(postHandler, {});

@@ -8,6 +8,9 @@ import { useState } from "react";
 export default function OrdersPage() {
   const { data, reload } = useDashboard();
   const [msg, setMsg] = useState("");
+  const [total,setTotal]=useState("");
+  const [reference,setReference]=useState("");
+  async function saveOrder(e:React.FormEvent){e.preventDefault();try{await fetchJSON("/api/orders",{method:"POST",body:JSON.stringify({total:Number(total),externalId:reference,posSource:"manual"})});setMsg("Order saved");setTotal("");setReference("");reload();}catch(e){setMsg(e instanceof Error?e.message:"Unable to save");}}
 
   async function ingest() {
     const customers = data?.customers || [];
@@ -31,13 +34,14 @@ export default function OrdersPage() {
     <div className="animate-fade-in mx-auto max-w-6xl">
       <PageHeader
         title="Orders / POS"
-        subtitle="Ingest from Toast, Square, Clover — demo simulator included"
+        subtitle={data?.demoMode ? "Demo order simulator" : "Recorded sales and manual orders"}
         actions={
-          <Button onClick={ingest}>Simulate POS order</Button>
+          data?.demoMode ? <Button onClick={ingest}>Simulate POS order</Button> : null
         }
       />
       {msg ? <p className="mb-3 text-xs font-medium text-brand-700">{msg}</p> : null}
 
+      {!data?.demoMode && <form onSubmit={saveOrder} className="mb-5 flex flex-wrap gap-3"><input aria-label="Order reference" required value={reference} onChange={e=>setReference(e.target.value)} placeholder="Order reference" className="rounded-lg border p-2"/><input aria-label="Order total" required type="number" min="0" step="0.01" value={total} onChange={e=>setTotal(e.target.value)} placeholder="Total" className="rounded-lg border p-2"/><Button type="submit">Save order</Button></form>}
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -74,24 +78,7 @@ export default function OrdersPage() {
         </div>
       </Card>
 
-      <Card className="mt-6 p-5 text-sm text-ink-600">
-        <p className="font-semibold text-ink-900">POS webhook contract (placeholder)</p>
-        <pre className="mt-2 overflow-x-auto rounded-xl bg-ink-900 p-4 text-[11px] text-ink-100">
-{`POST /api/orders
-{
-  "externalId": "TOAST-123",
-  "posSource": "toast",
-  "channel": "dine_in",
-  "total": 54.2,
-  "items": [{"name":"Burger","qty":1,"price":17}],
-  "customerId": "cus_xxx",
-  "offerCode": "BRUNCH15"
-}`}
-        </pre>
-        <p className="mt-3 text-xs">
-          On ingest: order stored · offer redemption incremented · loyalty points awarded · audit log written.
-        </p>
-      </Card>
+      {!data?.demoMode && <Card className="mt-6 p-5 text-sm text-ink-600">Automatic POS imports are not connected. Record orders manually until your POS provider is configured. Reusing an order reference does not create a duplicate.</Card>}
     </div>
   );
 }

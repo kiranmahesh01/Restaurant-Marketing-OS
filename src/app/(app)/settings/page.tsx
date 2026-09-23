@@ -17,13 +17,13 @@ export default function SettingsPage() {
 
   async function onboard() {
     try {
-      await fetchJSON("/api/restaurants", {
+      await fetchJSON(data?.demoMode ? "/api/restaurants" : "/api/onboarding", {
         method: "POST",
-        body: JSON.stringify({ action: "onboard", ...form }),
+        body: JSON.stringify(data?.demoMode ? { action: "onboard", ...form } : form),
       });
       setMsg(`Onboarded ${form.name}`);
       setForm({ name: "", cuisine: "Contemporary", city: "", state: "CA", brandVoice: "" });
-      reload();
+      window.location.reload();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Failed");
     }
@@ -34,8 +34,7 @@ export default function SettingsPage() {
       method: "POST",
       body: JSON.stringify({ action: "switch", id }),
     });
-    setMsg("Switched restaurant");
-    reload();
+    window.location.reload();
   }
 
   async function reset() {
@@ -48,7 +47,7 @@ export default function SettingsPage() {
 
   return (
     <div className="animate-fade-in mx-auto max-w-3xl">
-      <PageHeader title="Settings" subtitle="Restaurant profile, multi-tenant switcher, demo controls" />
+      <PageHeader title="Settings" subtitle="Restaurant profile and workspace settings" />
       {msg ? <p className="mb-3 text-xs font-medium text-brand-700">{msg}</p> : null}
 
       <Card className="mb-6">
@@ -242,7 +241,7 @@ export default function SettingsPage() {
               const j = await r.json();
               setMsg(
                 j.ok
-                  ? `Health OK · ${j.tenants?.restaurants || 0} restaurants · demo=${j.demoMode}`
+                  ? j.message || "Service available"
                   : `Health FAIL · ${JSON.stringify(j.checks?.filter((c: { ok: boolean }) => !c.ok) || j)}`
               );
             }}
@@ -252,6 +251,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {data?.demoMode && <>
       <Card className="mb-6 p-5">
         <h3 className="text-sm font-semibold text-ink-900">Multi-client scale (agency / franchise)</h3>
         <p className="mt-1 text-xs leading-relaxed text-ink-600">
@@ -291,6 +291,7 @@ export default function SettingsPage() {
           Reset demo data
         </Button>
       </Card>
+      </>}
     </div>
   );
 }

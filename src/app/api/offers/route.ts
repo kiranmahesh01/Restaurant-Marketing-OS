@@ -1,15 +1,16 @@
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { createOffer, getActiveUser, getStore, scoped, updateOffer } from "@/lib/store";
 import { canMutate } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({ offers: scoped(s.offers) });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (!canMutate(getActiveUser()?.role)) {
@@ -33,9 +34,10 @@ export async function POST(req: NextRequest) {
     const offer = createOffer(body);
     return NextResponse.json({ offer });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: writers});

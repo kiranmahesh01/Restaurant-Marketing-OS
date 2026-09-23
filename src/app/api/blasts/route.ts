@@ -1,3 +1,4 @@
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import {
   createBlast,
@@ -13,7 +14,7 @@ import type { BlastSegment } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   const s = getStore();
   const segment = req.nextUrl.searchParams.get("previewSegment") as BlastSegment | null;
   const channel = req.nextUrl.searchParams.get("channel") as "sms" | "email" | null;
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(payload);
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     if (body.action !== "ai_draft" && !canMutate(getActiveUser()?.role)) {
@@ -97,9 +98,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ blast });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Blast failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: writers});

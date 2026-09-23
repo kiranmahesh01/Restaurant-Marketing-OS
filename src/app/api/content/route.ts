@@ -1,15 +1,16 @@
+import { withWorkspace, writers, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { createContent, getActiveUser, getStore, scoped, updateContent } from "@/lib/store";
 import { canApprove, canMutate } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({ content: scoped(s.content) });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     const user = getActiveUser();
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (body.action === "approve" && body.id) {
       const item = updateContent(body.id, {
         status: "approved",
-        approvedBy: body.approvedBy || "Alex Rivera",
+        approvedBy: getActiveUser()?.name || "User",
       });
       return NextResponse.json({ content: item });
     }
@@ -67,9 +68,10 @@ export async function POST(req: NextRequest) {
     const item = createContent(body);
     return NextResponse.json({ content: item });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {roles: writers});

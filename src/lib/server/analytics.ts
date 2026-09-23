@@ -1,0 +1,9 @@
+import type {AnalyticsSnapshot,StoreShape} from '../types';
+export function computeAnalytics(s:StoreShape,rid:string):AnalyticsSnapshot {
+ const cutoff=Date.now()-30*86400000;
+ const orders=s.orders.filter(o=>o.restaurantId===rid&&o.status==='completed'&&Date.parse(o.orderedAt)>=cutoff);
+ const revenue=orders.reduce((n,o)=>n+o.total,0), days=new Map<string,{date:string;revenue:number;orders:number}>(),channels=new Map<string,number>(),items=new Map<string,{name:string;qty:number;revenue:number}>();
+ for(const order of orders){const date=order.orderedAt.slice(0,10);const d=days.get(date)||{date,revenue:0,orders:0};d.revenue+=order.total;d.orders++;days.set(date,d);channels.set(order.channel,(channels.get(order.channel)||0)+order.total);for(const item of order.items){const i=items.get(item.name)||{name:item.name,qty:0,revenue:0};i.qty+=item.qty;i.revenue+=item.qty*item.price;items.set(item.name,i);}}
+ const reviews=s.reviews.filter(r=>r.restaurantId===rid),adSpend=s.ads.filter(a=>a.restaurantId===rid).reduce((n,a)=>n+a.spend30d,0);
+ return {restaurantId:rid,period:'last_30_days',revenue,orders:orders.length,avgTicket:orders.length?revenue/orders.length:0,newCustomers:s.customers.filter(c=>c.restaurantId===rid&&Date.parse(c.createdAt)>=cutoff).length,loyaltyRedemptions:orders.filter(o=>o.offerCode).length,contentPublished:s.content.filter(c=>c.restaurantId===rid&&c.status==='published'&&Date.parse(c.publishedAt||'')>=cutoff).length,adSpend,adRoas:0,reviewAvg:reviews.length?reviews.reduce((n,r)=>n+r.rating,0)/reviews.length:0,reviewCount:reviews.length,topItems:[...items.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,5),revenueByDay:[...days.values()].sort((a,b)=>a.date.localeCompare(b.date)),channelMix:[...channels].map(([channel,value])=>({channel,revenue:value,pct:revenue?100*value/revenue:0}))};
+}

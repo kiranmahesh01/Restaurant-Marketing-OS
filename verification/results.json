@@ -181,17 +181,14 @@
   },
   {
     "name": "Viewer denied customer creation",
-    "result": "FAIL",
-    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+    "result": "PASS"
   },
   {
     "name": "Viewer denied orders",
-    "result": "FAIL",
-    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+    "result": "PASS"
   },
   {
     "name": "Marketer cannot bypass approval via update",
-    "result": "FAIL",
-    "detail": "Expected values to be strictly equal:\n\n200 !== 403\n"
+    "result": "PASS"
   }
 ]

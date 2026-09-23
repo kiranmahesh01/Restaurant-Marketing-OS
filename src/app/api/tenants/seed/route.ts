@@ -1,3 +1,4 @@
+import { withWorkspace, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { mutateStore, addAudit, getStore } from "@/lib/store";
 import { uid } from "@/lib/utils";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  *
  * Protect in production with CRON_SECRET or remove this route.
  */
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const secret = process.env.CRON_SECRET;
     if (secret) {
@@ -180,14 +181,11 @@ export async function POST(req: NextRequest) {
         "Restaurant business data must be Postgres-backed with RLS. In-memory is for product demo only.",
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Seed failed" },
-      { status: 500 }
-    );
+    return errorResponse(e);
   }
 }
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   return NextResponse.json({
     totalRestaurants: s.restaurants.length,
@@ -197,3 +195,7 @@ export async function GET() {
       "POST /api/tenants/seed { count: 25 } to add demo tenants. Cap 500 in memory. Real multi-client = Supabase.",
   });
 }
+
+export const GET = withWorkspace(getHandler, {demoOnly: true});
+
+export const POST = withWorkspace(postHandler, {demoOnly: true});

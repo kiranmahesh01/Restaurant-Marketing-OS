@@ -1,3 +1,4 @@
+import { withWorkspace } from "@/lib/server/workspace";
 import { NextResponse } from "next/server";
 import { getAiStatus, generateContent } from "@/lib/ai-content";
 import { getStore } from "@/lib/store";
@@ -5,7 +6,7 @@ import { getStore } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 /** GET — which AI providers are configured and which will run */
-export async function GET() {
+async function getHandler() {
   return NextResponse.json({
     ok: true,
     ...getAiStatus(),
@@ -14,7 +15,7 @@ export async function GET() {
 }
 
 /** POST — optional self-test generate */
-export async function POST(req: Request) {
+async function postHandler(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const status = getAiStatus();
@@ -53,3 +54,7 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {});

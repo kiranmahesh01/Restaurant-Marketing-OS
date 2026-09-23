@@ -1,3 +1,4 @@
+import { withWorkspace } from "@/lib/server/workspace";
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { getAiStatus } from "@/lib/ai-content";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 /**
  * Big-company style launch checklist — every small thing before a client goes live.
  */
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   const ai = getAiStatus();
   const sb = getSupabaseConfig();
@@ -132,3 +133,5 @@ export async function GET() {
     },
   });
 }
+
+export const GET = withWorkspace(getHandler, {});

@@ -1,9 +1,10 @@
+import { withWorkspace, errorResponse } from "@/lib/server/workspace";
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardBundle, getStore, switchUser } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function getHandler() {
   const s = getStore();
   const bundle = getDashboardBundle();
   return NextResponse.json({
@@ -16,8 +17,9 @@ export async function GET() {
   });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
+    if (!getStore().demoMode) return NextResponse.json({error:"Persona switching is disabled in live mode"},{status:403});
     const body = await req.json();
     if (body.action === "switch_user" && body.userId) {
       switchUser(body.userId);
@@ -29,9 +31,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Session failed" },
-      { status: 400 }
-    );
+    return errorResponse(e);
   }
 }
+
+export const GET = withWorkspace(getHandler, {});
+
+export const POST = withWorkspace(postHandler, {});
